@@ -14,6 +14,10 @@
 #include <stdlib.h>
 #include <jsoncpp/json/json.h>
 
+//Functions File
+#include "./functions.cpp"
+
+#include <pthread.h>
 
 // Linux headers
 #include <fcntl.h> // Contains file controls like O_RDWR
@@ -27,327 +31,42 @@
 #include <iostream>
 #include <iomanip>
 
+#include <ctime>
+#include <ratio>
+#include <chrono>
+
 // Socket header
 #include <netinet/in.h> 
 
 #include <mysql/mysql.h>
  
-#define PORT 8081 
+#define PORT 8081 //also defined in functions.cpp
 
 
 using namespace std;
 
-const unsigned short BUFF_SIZE = 200;
+//BUFF_SIZE defined in functions.cpp
 
-void print_buf(char (&read_buf)[BUFF_SIZE], int numIterations, int numReads){
-	cout<< numReads << ": "<<endl<<"Print iterations: "<< numIterations<<endl;
+pthread_mutex_t retrying_mutex =PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t serial_mutex =PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t inital_write_lock = PTHREAD_MUTEX_INITIALIZER; 
+pthread_mutex_t read_lock = PTHREAD_MUTEX_INITIALIZER;
 
-	for (int i = 0; i < BUFF_SIZE; ++i)
-		cout <<  hex << setfill('0') << setw(2)  << (int)(*(unsigned char*)(&read_buf[i])) << dec << " ";
+pthread_cond_t inital_load_cond  =  
+               PTHREAD_COND_INITIALIZER;
+pthread_cond_t write_cond  =  
+PTHREAD_COND_INITIALIZER;
 
-	cout <<  endl<<endl;
-}
+pthread_cond_t retry_cond = PTHREAD_COND_INITIALIZER;
 
-void read_bytes(char  (&read_buf)[BUFF_SIZE],int & serial_port, int & numIterations) {
-		/* reading above 255 is tricky, we need to read BUFFSIZE bytes exactly, so this ensures it */
-		int totalNeeded = BUFF_SIZE;
-		int remaining   = sizeof(read_buf);
-		numIterations=0;
-		while (remaining > 0){
-			try{
-				ssize_t readChars = read(serial_port, &read_buf[totalNeeded - remaining], remaining);
-				if (!(readChars > 0)){
-					return;
-				}
-				else{
-					remaining -= readChars;
-					numIterations++;
-				}
-			} catch(ssize_t readChars){
-				cout<<"Read exception caught"<<endl;
-			}	
-		}
-}
+int retrying =  0;
 
-int usb_port(int & serial_port) {
-	serial_port = open("/dev/ttyUSB0", O_RDWR );
-	//Check for errors
-	if (serial_port < 0) {
-	    printf("Error %i from open: %s\n", errno, strerror(errno));	
-		return(serial_port);	
-	}
-	else{
-		// Create new termios struc, we call it 'tty' for convention
-		struct termios tty;
-		memset(&tty, 0, sizeof tty);
-
-		// Read in existing settings, and handle any error
-		if(tcgetattr(serial_port, &tty) != 0) {
-		//	printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
-		}
-
-		tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
-		tty.c_cflag &= ~CSTOPB; // Clear stop field, only one stop bit used in communication (most common)
-		tty.c_cflag |= CS8; // 8 bits per byte (most common)
-
-		//"Enabling this when it should be disabled can result in your serial port receiving no data"
-		tty.c_cflag &= ~CRTSCTS; // Disable RTS/CTS hardware flow control (most common)
-
-		tty.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
-
-		tty.c_lflag &= ~ICANON; //Canonical mode is disabled
-
-		//If this bit is set, sent characters will be echoed back.
-		tty.c_lflag &= ~ECHO; // Disable echo
-		tty.c_lflag &= ~ECHOE; // Disable erasure
-		tty.c_lflag &= ~ECHONL; // Disable new-line echo
-
-		tty.c_lflag &= ~ISIG; // Disable interpretation of INTR, QUIT and SUSP (We don’t want this with a serial port)
-
-		tty.c_iflag &= ~(IXON | IXOFF | IXANY); // Turn off software flow control
-
-		tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL); // Disable any special handling of received bytes, we just want raw data
-
-		tty.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
-		tty.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
-		// tty.c_oflag &= ~OXTABS; // Prevent conversion of tabs to spaces (NOT PRESENT IN LINUX)
-		// tty.c_oflag &= ~ONOEOT; // Prevent removal of C-d chars (0x004) in output (NOT PRESENT IN LINUX)
-
-		tty.c_cc[VTIME] = 2;    // Wait for up to 1s (10 deciseconds), returning as soon as any data is received.
-		tty.c_cc[VMIN] = 0; //wait for BUFF_SIZE bytes to fill then return
-
-		// Set in/out baud rate to be 9600
-		// If you have no idea what the baud rate is and you are trying to communicate with a 3rd party system,
-		//   try B9600, then B57600 and then B115200 as they are the most common rates.
-		cfsetispeed(&tty, B230400);
-		cfsetospeed(&tty, B230400);
-
-		// Save tty settings, also checking for error
-		if (tcsetattr(serial_port, TCSANOW, &tty) != 0) {
-		//	printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
-		}
-	
-		//prevent other processes from reading/writing to the serial port at the same time you are.
-    	if(flock(serial_port, LOCK_EX | LOCK_NB) == -1) {
-			throw std::runtime_error("Serial port with file descriptor " +
-				std::to_string(serial_port) + " is already locked by another process.");
-		}
-		return(serial_port);
-	}
-}
-
-void mysqlConnect(MYSQL & mysql){
-
-	//Connect to MySQL server
-	mysql_init(&mysql);
-	mysql_options(&mysql,MYSQL_READ_DEFAULT_GROUP,"nitrogen");
-	printf("MYSQL INFO: %s\n", mysql_get_client_info());
-	if (!mysql_real_connect(&mysql,"127.0.0.1","nitro","n1tr0","db_nitro",0,NULL,0))
-	{
-		fprintf(stderr, "Failed to connect to database: Error: %s\n",
-			mysql_error(&mysql));
-		return;
-	}
-	cout<<"Successfully Connected to MYSQL"<<endl;
-	return;
-	
-}
-
-int mysqlQuery(MYSQL & mysql, vector<string> & machines, const char * field_name){
-	//TODO: Are mutliple return point good or bad practice???
-	//TODO: Select machine_table_name instead of *
-	unsigned int num_fields;
-	MYSQL_ROW row;
-
-	if(mysql_query(&mysql, "SELECT * from machines")){ 
-		cout<<"MySQL Query Error"<<endl;
-		return 0;
-	}
-	MYSQL_RES *result  = mysql_store_result(&mysql);
-	if(!result){
-		fprintf(stderr, "Error: %s\n", mysql_error(&mysql));
-		return 0;
-	}
-
-	//Find index of field_name and field_table_name
-	num_fields = mysql_num_fields(result); 
-	MYSQL_FIELD *fields;
-	fields = mysql_fetch_fields(result);
-	
-	unsigned int field_name_index;
-	bool field_name_index_found = false;
-	for(unsigned int i = 0; i < num_fields; i++){
-		if(!(strcmp(fields[i].name , field_name))){
-			field_name_index = i;
-			field_name_index_found = true;
-		}
-	}	
-
-	if(!field_name_index_found){
-		cout<<" Warning on mysql query: Bad field name in mySqlQuery()"<<endl;
-	}
-
-	//Search through rows
-	while ((row = mysql_fetch_row(result)))	{
-		for(unsigned int p = 0; p < num_fields; p++) {	
-			//if field matches our field_name or field_table_name from above, record that cell
-			if(p == field_name_index){
-				string t = row[p];
-				machines.push_back(t);
-			}
-		}
-	}
-
-	// //Print Vector
-	 for (std::vector<string>::const_iterator i = machines.begin(); i != machines.end(); ++i)
-		std::cout << *i << ' ';
-
-	mysql_free_result(result);
-	return 1;
-	
-	
-}
-
-void mysqlCloseConnect(MYSQL &mysql){
-	mysql_close(&mysql);
-}
-
-int readSocket( int & new_socket ){
-	int valread;
-	char buffer[1024] = {0}; 
-	//valread = read( new_socket , buffer, 1024);
-	valread = recv( new_socket, buffer,1024, 0);
-
-    return(valread);
-}
-
-void sendSocket(int & new_socket, char const * data, const unsigned short DATA_SIZE){
-	try{
-    	send(new_socket , data , DATA_SIZE , 0 ); 
-		printf("Data message sent from C++\n"); 
-	}
-	catch (int e){
-		printf("*** could not send data ***");
-	}
-}
-
-int socket(int & server_fd){
-	int new_socket; 
-    struct sockaddr_in address; 
-    int opt = 1; 
-    int addrlen = sizeof(address); 
-       
-    // Creating socket file descriptor 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) 
-    { 
-        cout<<"*** Failed to create socket ***"<<endl; 
-        exit(EXIT_FAILURE); 
-    } 
-    cout<< "Created Socket "<<endl;
-       
-    // Forcefully attaching socket to the port 8080 
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
-                                                  &opt, sizeof(opt))) 
-    { 
-        cout<<"*** Failed to run setsockopt() ***"<<endl; 
-        exit(EXIT_FAILURE); 
-    }
-	
-	// set a timeout for client to connect / read from 
-	struct timeval tv;
-	tv.tv_sec = 10;
-	tv.tv_usec = 0;
-	if (setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv)){
-		
-	}
-
-    address.sin_family = AF_INET; 
-    address.sin_addr.s_addr = INADDR_ANY; 
-    address.sin_port = htons( PORT ); 
-    
-    // Forcefully attaching socket to the port 8080 
-    int error_num = bind(server_fd, (struct sockaddr *)&address, sizeof(address));
-    if(error_num < 0 ){ 
-       cout<<"*** Bind Failed ***"<<endl; 
-        exit(EXIT_FAILURE); 
-    } 	
-	if (listen(server_fd, 3) < 0) 
-    { 
-        cout<<"*** listen ***"<<endl; 
-        exit(EXIT_FAILURE); 
-    } 
-	// socket blocks program on accept() until either a client accepts or timeout occurs
-    int error_num2 = new_socket = accept(server_fd, (struct sockaddr *)&address,   (socklen_t*)&addrlen);
-    if(error_num2 < 0){ 
-        cout<<"*** No Client Accepted Connection *** - "<<errno<<endl; 
-		return -1;
-    } 
-
-	return new_socket;
-}
-
-string createJsonString(char  (&read_buf)[BUFF_SIZE], const vector<string> &machines){
-	int temp, pressure;
-	vector<Json::Value> arrayVehicles;
-	Json::Value root;
-	Json::Value myJson = root["machines"];
-
-	//handle number of loops to not depend on mysql in case it fails
-	int num_machines = 0;
-	if(machines.size() <= 0) {
-		//Resort to hard code backup if mysql is not working
-		num_machines = 8;
-	}else{
-		num_machines = machines.size();
-	}
-
-	for(int i = 0; i < num_machines; i++){
-		stringstream ss;
-		ss.clear();
-		ss << hex << setfill('0') << setw(2)  << (int)(*(unsigned char*)(&read_buf[(i*2)]));
-		ss >> temp;
-		ss.clear();
-		ss << hex << setfill('0') << setw(2)  << (int)(*(unsigned char*)(&read_buf[(i*2)+1]));
-		ss >> pressure;
-		
-		myJson["id"] = Json::Value::Int(i+1);
-		string machineName = machines[i]; 
-		myJson["name"] = Json::Value(machineName);
-		myJson["temp"] = Json::Value::Int(temp);
-		myJson["pressure"] = Json::Value::Int(pressure);
-
-		arrayVehicles.push_back(myJson);
-	}
-
-	Json::FastWriter fastWriter;
-	string output = "{ \"machines\":  [ ";
-	for(int i=0; i<num_machines; i++){
-		if(i != 0)
-			output += ",";
-		output += fastWriter.write(arrayVehicles[i]);
-	}
-	output += " ] }";
-
-	if(machines.size() <= 0){
-		cout<<"Error/Warning: No data written, check mysql connection"<<endl;
-	}
-	
-	return(output);
-}
-
-int main() {
-	
+void * mainThreadFunc(void * serialP){
 	//initialize socket 
 	int server_fd;
-	int new_socket = socket(server_fd);
- 	
-	// Allocate memory for read buffer, set size according to your needs
-	int serial_port;
-	char read_buf [BUFF_SIZE];
-	memset(&read_buf, '\0', sizeof(read_buf));
+	int new_socket = nodeSocket(server_fd);
 
-    //Set / read in settings for our Port
-	usb_port(serial_port);
+	int serial_port = *(int *)serialP;
 
 	//Connect to MySQL Database
 	MYSQL mysql;
@@ -360,53 +79,153 @@ int main() {
 		cout<<"Query to MySQL did not successfully run"<<endl;
 	}
 
+	//Get mode_variables 
+	vector< vector<string> > mode_variables;
+	if(!(mysqlQueryFixed(mysql, mode_variables))){
+		cout<<"Query to MySQL did not successfully get mode_variables, default variables applied"<<endl;
+	}
+
+	//Set Start time for Main Read Timer
+	//std::chrono::steady_clock::time_point readTime1 = std::chrono::steady_clock::now();
+
+	//Set Start time for Timers
+	std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 	
+	ModeHandler modeHandler(mode_variables[0][1] == "timer_mode2_wait" ? stof(mode_variables[0][0]) : float(120),
+							mode_variables[1][1] == "timer_mode4_wait" ? stof(mode_variables[1][0]) : float(10),
+							mode_variables[2][1] == "timer_motor_relay" ? stof(mode_variables[2][0]) : float(30),
+							mode_variables[3][1] == "timer_start_relay" ? stof(mode_variables[3][0]) : float(2),
+							mode_variables[4][1] == "timer_stop_relay" ? stof(mode_variables[4][0]) : float(2),
+							mode_variables[5][1] == "timer_shut_down_counter" ? stof(mode_variables[5][0]) : float(30),
+							mode_variables[6][1] == "timer_bleed_relay_m45" ? stof(mode_variables[6][0]) : float(5),
+							mode_variables[7][1] == "timer_bleed_relay_m1" ? stof(mode_variables[7][0]) : float(2),
+							mode_variables[8][1] == "max_high_pressure" ? stoi(mode_variables[8][0]) : 400,
+							mode_variables[9][1] == "high_pressure_thres" ? stoi(mode_variables[9][0]) : 350,
+							mode_variables[10][1] == "max_low_pressure" ? stoi(mode_variables[10][0]) : 94,
+							mode_variables[11][1] == "low_pressure_thres" ? stoi(mode_variables[11][0]) : 86,
+							mode_variables[12][1] == "min_low_pressure" ? stoi(mode_variables[12][0]) : 60,
+							mode_variables[13][1] == "shut_down_counter" ? stoi(mode_variables[13][0]) : 2); 
+	ModeHandler * mh =&modeHandler;
+	
+	char read_buf [BUFF_SIZE];
+	memset(&read_buf, '\0', sizeof(read_buf));
+
+	//Allocate memory for ui_buf buffer
+	char ui_buf[4];
+	memset(&ui_buf, '\0', sizeof(ui_buf));
+
+	// //Allocate memory for write_poll_buf buffer
+	// char write_poll_buf[4];
+	// memset(&write_poll_buf, '\0', sizeof(write_poll_buf));
+
+	//Allocate memory for write_buf command buffer
+	char write_buf[29];
+	memset(&write_buf, '\0', sizeof(write_buf));
+
+	//ModeHandler modeHandler;
+	//Pressure Values
+	int low_pressure , high_pressure = 0;
+
+
 	//numReads: num of reads from port
 	//n: num of iterations to read exact num of bits | 0 means nothing read this iteration, > 0 means something has been read 
-    int numReads = 0, numIterations = 0, missed_reads = 0;
+    int numReads = 0, numIterations = 0, writeResponse = 0;
+	int totalReadChars = 0;
 
+	cout<<"THIS IS BEFORE WHILE LOOP"<<endl;
+	pthread_cond_signal(&inital_load_cond); 
+	int read_count=0;
     while(true){
-		
-		//read_bytes() might miss once or twice every once in a while, if it misses more than 10 times in a row,
-		//    the port might have been disconnected, so we will check for reconnection
-		if(missed_reads > 10){ //if the usb port been disconnected
-			if(serial_port > 0){
-				close(serial_port);
-			}
+		read_count++;
+
+			pthread_mutex_lock(&read_lock); 
+			pthread_cond_wait(&write_cond, &read_lock);
+
+			pthread_mutex_lock(&serial_mutex);
+				//cout<<dec<<read_count<<" Reading..."<<endl;
+				totalReadChars = read_bytes(read_buf, serial_port, numIterations);
+				//cout<<dec<<read_count<<" Done Reading..."<<endl;
+			pthread_mutex_unlock(&serial_mutex);
 			
-			if(usb_port(serial_port) > 0){
-				numReads = 0;
-				cout<<"Successfully reconnecting to Port"<<endl;
-				missed_reads = 0;
-			}else{
-				cout<<"Attempting to reconnect to Port in 5 seconds..."<<endl;
-				usleep(5000000);
-			}
+
+		
+
+		if(numIterations > 0 && totalReadChars > 0){ //if something was successfully polled and read from USB, do stuff with this data
+			//cout<<"If poll&read ----"<<"WriteResponse: "<<writeResponse<<"  |  ReadResponse: "<<numIterations<<endl;
+			
+			
 				
-		}else{ // if usb not disconnected, read
-			read_bytes(read_buf, serial_port, numIterations);
-		}
-	    
-		if(numIterations > 0){ //if something was read from USB, do stuff with this data
-			missed_reads = 0;
+			
+			
 
-			print_buf(read_buf, numIterations, numReads);
+			//Handle Time Updates
+			std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+			std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+			t1 = std::chrono::steady_clock::now();
+			(*mh).updateTimer(time_span.count());
 
-			const string tmp2 = createJsonString(read_buf, machines);
 
+			//Take read data and grab both pressure values
+			getPressuresLH(read_buf, low_pressure, high_pressure);
+			
+			//Call Update to Mode Object
+			(*mh).updateMode(low_pressure, high_pressure);
+			
+			//Edit write_buf with relay_p pointer to array
+			editWriteBuf(write_buf, (*mh));
+
+			pthread_mutex_lock(&serial_mutex);
+			//Write to Serial Port to Update Relays
+			//cout<<"Write Bytes to board...."<<endl;
+			write_bytes(serial_port, write_buf);
+			//cout<<"Done Write Bytes to board...."<<endl;
+			pthread_mutex_unlock(&serial_mutex);
+			
+			const string tmp2 = createJsonDataString(read_buf, low_pressure, high_pressure, (*mh));
 			//convert string to char array
 			char const * stringified_json = tmp2.c_str();
 			int size = strlen(stringified_json);
 
 			//make sure client is still connected to socket
-			int stillAlive = readSocket(new_socket);
-
+			int stillAlive = readNodeSocket(new_socket, ui_buf);
+			
 			//read from node js socket here
 			//sterilize string here
 			//write to port here
 
 			if(stillAlive > 0){
-				sendSocket(new_socket, stringified_json, size);	
+				sendNodeSocket(new_socket, stringified_json, size);
+				//cout<<" ------ " << stillAlive<<" ------------" <<endl;
+				if(ui_buf[0]=='0' && ui_buf[1]=='5'){
+					(*mh).setStop();					
+					
+				}
+				if(ui_buf[0]=='0' && ui_buf[1]=='6'){
+					(*mh).setStart();					
+				}
+				if(ui_buf[0]=='9' && ui_buf[1]=='9'){
+					//Refetch mode_variables
+					if(!(mysqlQueryFixed(mysql, mode_variables))){
+						cout<<"Query to MySQL did not successfully get mode_variables, default variables applied"<<endl;
+					}
+					//create new object 
+					ModeHandler modeHandlerNew(mode_variables[0][1] == "timer_mode2_wait" ? stof(mode_variables[0][0]) : float(120),
+							mode_variables[1][1] == "timer_mode4_wait" ? stof(mode_variables[1][0]) : float(10),
+							mode_variables[2][1] == "timer_motor_relay" ? stof(mode_variables[2][0]) : float(30),
+							mode_variables[3][1] == "timer_start_relay" ? stof(mode_variables[3][0]) : float(2),
+							mode_variables[4][1] == "timer_stop_relay" ? stof(mode_variables[4][0]) : float(2),
+							mode_variables[5][1] == "timer_shut_down_counter" ? stof(mode_variables[5][0]) : float(30),
+							mode_variables[6][1] == "timer_bleed_relay_m45" ? stof(mode_variables[6][0]) : float(5),
+							mode_variables[7][1] == "timer_bleed_relay_m1" ? stof(mode_variables[7][0]) : float(2),
+							mode_variables[8][1] == "max_high_pressure" ? stoi(mode_variables[8][0]) : 400,
+							mode_variables[9][1] == "high_pressure_thres" ? stoi(mode_variables[9][0]) : 350,
+							mode_variables[10][1] == "max_low_pressure" ? stoi(mode_variables[10][0]) : 94,
+							mode_variables[11][1] == "low_pressure_thres" ? stoi(mode_variables[11][0]) : 86,
+							mode_variables[12][1] == "min_low_pressure" ? stoi(mode_variables[12][0]) : 60,
+							mode_variables[13][1] == "shut_down_counter" ? stoi(mode_variables[13][0]) : 2); 
+					mh =&modeHandlerNew;
+					cout<<"Mode Variables Changed"<<endl;
+				}
 			}else{
 				//create 'new' socket (should resuse old one) and wait for client to reconnect until timeout
 				cout<<"Client disconnected; Waiting for reconnect."<<endl;
@@ -417,16 +236,153 @@ int main() {
 					close(server_fd);
 
 				server_fd = -1;
-				new_socket = socket(server_fd);
+				new_socket = nodeSocket(server_fd);
 				
 			}
-		}else{
-			missed_reads++;			
+
+			//Reset writeResponse & numIterations
+			writeResponse =0;
+			numIterations = 0;
+			
+		}
+
+		if( writeResponse == -1 || totalReadChars == -1 ){//if the usb port been disconnected
+			
+
+			pthread_mutex_lock(&serial_mutex);
+			if(serial_port > 0){
+				close(serial_port);
+			}
+			while(usb_port(serial_port) <=0){
+				//Send error to UI
+				pthread_mutex_lock(&retrying_mutex);
+				retrying = 1;
+				//usleep(10000000);
+				pthread_mutex_unlock(&retrying_mutex);
+
+				string error_json = createJsonString("{error: 1}");
+				char const * stringified_error_json = error_json.c_str();
+				int error_size = strlen(stringified_error_json);
+				sendNodeSocket(new_socket, stringified_error_json , error_size);
+				cout<<"Attempting to reconnect to Port in 5 seconds..."<<endl;
+				usleep(5000000);
+			}
+			//while(retrying == 1)
+			//if(usb_port(serial_port) > 0){
+				pthread_mutex_lock(&retrying_mutex);
+				retrying = 0;
+				//pthread_cond_signal(&retry_cond);
+				pthread_mutex_unlock(&retrying_mutex);
+				numReads = 0;
+				cout<<"Successfully reconnecting to Port"<<endl;
+				writeResponse = 0;
+				totalReadChars = 0;
+				//t1 = std::chrono::steady_clock::now();
+				//readTime1 = std::chrono::steady_clock::now();
+				//Set stop on reconnect
+				//(*mh).setStop();
+			//}else{	
+				
+			//}
+			pthread_mutex_unlock(&serial_mutex);
+
+			//pthread_mutex_unlock(&read_lock);
 		}
         numReads++;
+		pthread_mutex_unlock(&read_lock); 
     }
-	//Clean up
+
 	mysqlCloseConnect(mysql);
+
+	return NULL;
+}
+
+void * threadFunc(void * serialP){
+	//Allocate memory for write_poll_buf buffer
+	// std::cout << "Thread Function :: Start" << std::endl;
+	// // Sleep for 2 seconds
+	// sleep(2);
+	// std::cout << "Thread Function :: End" << std::endl;
+	
+	int newSerial = *(int *)serialP;
+	char write_poll_buf[4];
+	memset(&write_poll_buf, '\0', sizeof(write_poll_buf));
+	int writeResponse = 0;
+
+	pthread_mutex_lock(&inital_write_lock); 
+	pthread_cond_wait(&inital_load_cond, &inital_write_lock); 
+
+	std::chrono::steady_clock::time_point readTime1 = std::chrono::steady_clock::now();
+
+	editPollWriteBuf(write_poll_buf);
+	int write_count =0;
+	while(true){
+		write_count++;
+		std::chrono::steady_clock::time_point readTime2 = std::chrono::steady_clock::now();
+		std::chrono::duration<double> read_time_span = std::chrono::duration_cast<std::chrono::duration<double>>(readTime2 - readTime1);
+		
+		while(retrying == 1){
+			pthread_cond_wait(&retry_cond, &inital_write_lock);
+		}
+		
+		if(read_time_span.count() >= float(0.20) && read_time_span.count() <= float(.30)){
+			readTime1 = std::chrono::steady_clock::now();
+			//Poll for card
+			
+			//just added the missed reads section above instead of below
+			//work on adding cond_wait here 
+			
+			pthread_mutex_lock(&serial_mutex);
+
+				//cout<<write_count<<" Writing...@:"<<read_time_span.count() <<endl;
+				writeResponse = write_poll_bytes(newSerial, write_poll_buf);
+				//cout<<write_count<<"Done Writing..."<<endl;
+				pthread_cond_signal(&write_cond);
+			
+			pthread_mutex_unlock(&serial_mutex);
+
+			
+		}else if(read_time_span.count() > float(.30)){
+			readTime1 = std::chrono::steady_clock::now();
+			pthread_cond_signal(&write_cond);
+		}
+
+		
+	}
+	pthread_mutex_unlock(&inital_write_lock);
+
+	return NULL;
+}
+
+int main() {
+	
+	
+ 	
+	// Allocate memory for read buffer, set size according to your needs
+	int serial_port;
+	
+
+    //Set / read in settings for our Port
+	usb_port(serial_port);
+
+	
+	pthread_t writeThread;
+	pthread_t mainThread;
+
+	
+	pthread_create(&mainThread, NULL, mainThreadFunc, &serial_port);
+	//usleep(50000000);
+	pthread_create(&writeThread, NULL, threadFunc, &serial_port);
+
+	while(1);
+	//Clean up
+	// err = pthread_join(threadId, NULL);
+	// if (err)
+	// 	std::cout << "Failed to join Thread : " << strerror(err) << std::endl;
+	pthread_mutex_destroy(&retrying_mutex);
+	pthread_mutex_destroy(&serial_mutex);
+	pthread_mutex_destroy(&inital_write_lock);
+	pthread_mutex_destroy(&read_lock);
 	close(serial_port);
 
 
