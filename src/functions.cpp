@@ -27,6 +27,9 @@
 #include <iostream>
 #include <iomanip>
 
+#include <sys/time.h>
+#include <sys/types.h>
+
 // Socket header
 #include <netinet/in.h> 
 
