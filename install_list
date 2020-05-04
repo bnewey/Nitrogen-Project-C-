@@ -1,0 +1,8 @@
+libjsoncpp-dev
+libmysqlclient-dev
+nodejs
+npm
+mysql-server
+npm install --save react-chartjs-2 chart.js
+
+
