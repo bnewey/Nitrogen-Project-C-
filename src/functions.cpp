@@ -79,6 +79,11 @@ int read_bytes(char  (&read_buf)[BUFF_SIZE],int & serial_port , int & numIterati
 				int in;
 				ioctl(serial_port, FIONREAD, &in);
 				//cout<<"IN READ"<<in<<endl;
+				//Clear out buffer of anything unread from last read
+				if(in > 0){
+					//maybe figure out a way to clear read buffer without reading
+					ssize_t readChars2 = read(serial_port, &read_buf[in], in);
+				}
 				ssize_t readChars = read(serial_port, &read_buf[totalNeeded - remaining], remaining);
 				//cout<<"Read Chars: "<<dec<<readChars<<endl;
 				if (!(readChars > 0)){
@@ -95,10 +100,10 @@ int read_bytes(char  (&read_buf)[BUFF_SIZE],int & serial_port , int & numIterati
 				cout<<"Read exception caught"<<endl;
 			}	
 		}
-		if(read_buf[0] != 0x02){
+		if(read_buf[0] != 0x02 && read_buf[BUFF_SIZE-1] != 0x55){
 			cout<<"ERROR: BAD INPUT FROM COM PORT"<<endl;
 			//print_buf(read_buf, 1 ,1);
-			//return -1;
+			return 0;
 		}
 		
 		return(totalRead);

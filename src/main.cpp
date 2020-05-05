@@ -142,8 +142,9 @@ int main() {
 				totalReadChars = 0;
 				numIterations = 0;
 				t1 = std::chrono::steady_clock::now();
-				//Set stop on reconnect
-				//(*mh).setStop();
+				//Restart on reconnect
+				(*mh).setStop();
+				(*mh).setStart();
 			}else{	
 				//Send error to UI
 				(*mh).setStop();
@@ -152,8 +153,6 @@ int main() {
 				int error_size = strlen(stringified_error_json);
 				sendNodeSocket(new_socket, stringified_error_json , error_size);
 				cout<<"Attempting to reconnect to Port in 5 seconds..."<<endl;
-
-				
 				usleep(5000000);
 			}
 				
