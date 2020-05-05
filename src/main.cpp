@@ -130,7 +130,7 @@ int main() {
 
 			///
 			//python test to reset USB 
-			system("python /tmp/reset_usb.py pathpci /sys/bus/pci/drivers/xhci_hcd/0000:00:14.0");
+			system("python /home/nitrogen/reset_usb.py pathpci /sys/bus/pci/drivers/xhci_hcd/0000:00:14.0");
 			usleep(5000000);
 
 			///
