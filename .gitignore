@@ -1,1 +1,5 @@
 bin/main
+buildThis.sh
+buildThisTest.sh
+.vscode
+.vscode/*
