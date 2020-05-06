@@ -67,6 +67,8 @@ class ModeHandler {
     // update
     void updateMode(int, int, bool);
 
+    void restartMH();
+
     //Timer 
     void changeTime(const boost::system::error_code& /*e*/);
     void updateTimer(float);
@@ -96,6 +98,7 @@ class ModeHandler {
     void setCurrentMode(int);
     void setStart();
     void setStop();
+
   
 
 };

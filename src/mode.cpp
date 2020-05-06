@@ -309,6 +309,12 @@ void ModeHandler::updateMode(int pressure_l, int pressure_h, bool compressor){
     
 }
 
+void ModeHandler::restartMH(){
+    //To restart we need to stop, then update itself to take effect
+    this->setStop();
+    this->updateMode(this->pressure_low, this->pressure_high, this->compressor);
+    this->setStart();
+}
 
 //getters
 int ModeHandler::getCurrentMode(){

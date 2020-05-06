@@ -143,8 +143,8 @@ int main() {
 				numIterations = 0;
 				t1 = std::chrono::steady_clock::now();
 				//Restart on reconnect
-				(*mh).setStop();
-				(*mh).setStart();
+				//stops mh, then updates itsef, then starts
+				(*mh).restartMH();
 			}else{	
 				//Send error to UI
 				(*mh).setStop();
