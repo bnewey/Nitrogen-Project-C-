@@ -134,7 +134,6 @@ int main() {
 			usleep(5000000);
 
 			///
-			cout<<"STRING TO LOOK FOR 123123"<<endl;
 			if(usb_port(serial_port) > 0){
 				numReads = 0;
 				cout<<"Successfully reconnecting to Port"<<endl;
@@ -144,10 +143,14 @@ int main() {
 				t1 = std::chrono::steady_clock::now();
 				//Restart on reconnect
 				//stops mh, then updates itsef, then starts
-				(*mh).restartMH();
+				if((*mh).getStartStopValue()){
+					(*mh).restartMH();
+				}else{
+					(*mh).setStop();
+				}
+				
 			}else{	
 				//Send error to UI
-				(*mh).setStop();
 				string error_json = createJsonString("{error: 1}");
 				char const * stringified_error_json = error_json.c_str();
 				int error_size = strlen(stringified_error_json);
@@ -158,11 +161,13 @@ int main() {
 				
 		}else{ // if usb not disconnected, poll & read
 			totalReadChars = read_bytes(read_buf, serial_port, numIterations);	
+			cout<<"TotalReadChars: "<<totalReadChars<<endl;
 		}
 
 		if( numIterations > 0 && totalReadChars > 0){ //if something was successfully polled and read from USB, do stuff with this data
 			//cout<<"If poll&read ----"<<"WriteResponse: "<<writeResponse<<"  |  ReadResponse: "<<numIterations<<endl;
 			//print_buf(read_buf, numIterations ,numReads);
+			cout<<"READ GOOD STUFF: "<<endl;
 			missedReads = 0;
 	
 			//Handle Time Updates
