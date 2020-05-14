@@ -132,7 +132,7 @@ int main() {
 
 			///
 			//python test to reset USB 
-			system("python /home/nitrogen/reset_usb.py pathpci /sys/bus/pci/drivers/xhci_hcd/0000:00:14.0");
+			system("python /opt/nitrogen/reset_usb.py pathpci /sys/bus/pci/drivers/xhci_hcd/0000:00:14.0");
 			usleep(5000000);
 
 			///
@@ -147,8 +147,10 @@ int main() {
 				//stops mh, then updates itsef, then starts
 				if((*mh).getStartStopValue()){
 					(*mh).restartMH();
+					cout<<"RESTARTING MH"<<endl;
 				}else{
 					(*mh).setStop();
+					cout<<"STOPPED AFTER CONNECT"<<endl;
 				}
 				
 			}else{	
