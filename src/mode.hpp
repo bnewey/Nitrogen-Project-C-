@@ -61,8 +61,14 @@ class ModeHandler {
 
     // constructor from int (denominator)
     ModeHandler( float a, float b, float c, float d, float e,
-  float f, float g,
-  float h, int i, int j, int k, int l, int m, int n);
+    float f, float g,
+    float h, int i, int j, int k, int l, int m, int n);
+
+    //Copy constructor
+    ModeHandler( const ModeHandler &cp);
+
+    //Copy assignment
+    ModeHandler& operator=(const ModeHandler& cp);
 
     // update
     void updateMode(int, int, bool);

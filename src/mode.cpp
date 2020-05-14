@@ -107,6 +107,27 @@ ModeHandler::ModeHandler( float a, float b, float c, float d, float e, float f, 
 
     shut_down_counter=0;
 }
+// //Copy constructor
+// ModeHandler::ModeHandler( const ModeHandler &cp)
+//     : TIMER_MODE2_WAIT(cp.TIMER_MODE2_WAIT), TIMER_MODE4_WAIT(cp.TIMER_MODE4_WAIT), TIMER_MOTOR_RELAY(cp.TIMER_MOTOR_RELAY), TIMER_START_RELAY(cp.TIMER_START_RELAY),
+//      TIMER_STOP_RELAY(cp.TIMER_STOP_RELAY), TIMER_SHUT_DOWN_COUNTER(cp.TIMER_SHUT_DOWN_COUNTER), TIMER_BLEED_RELAY_M45(cp.TIMER_BLEED_RELAY_M45),
+//       TIMER_BLEED_RELAY_M1(cp.TIMER_BLEED_RELAY_M1), MAX_HIGH_PRESSURE(cp.MAX_HIGH_PRESSURE), HIGH_PRESSURE_THRESHOLD(cp.HIGH_PRESSURE_THRESHOLD),
+//       MAX_LOW_PRESSURE(cp.MAX_LOW_PRESSURE),LOW_PRESSURE_THRESHOLD(cp.LOW_PRESSURE_THRESHOLD), MIN_LOW_PRESSURE(cp.MIN_LOW_PRESSURE), SHUT_DOWN_COUNTER_MAX(cp.SHUT_DOWN_COUNTER_MAX),
+//       current_mode(cp.current_mode), pressure_high(cp.pressure_high), saved_pressure_high(cp.saved_pressure_high), pressure_low(cp.pressure_low), 
+//       compressor(cp.compressor), start_switch(cp.start_switch), relay_start(cp.relay_start), relay_stop(cp.relay_stop), relay_bleed(cp.relay_bleed),
+//       relay_motor(cp.relay_motor), relay_pump(cp.relay_pump),relay_chiller(cp.relay_chiller), timer_mode2_wait(cp.timer_mode2_wait), timer_mode4_wait(cp.timer_mode4_wait),
+//       timer_motor_relay(cp.timer_motor_relay), timer_start_relay(cp.timer_start_relay), timer_stop_relay(cp.timer_stop_relay), timer_shut_down_counter(cp.timer_shut_down_counter),
+//       timer_bleed_relay(cp.timer_bleed_relay), shut_down_counter(cp.shut_down_counter)
+// {}
+
+// //Copy Constructor Assignment
+// ModeHandler& ModeHandler::operator=(const ModeHandler& cp){
+//     if(this != &cp){    
+//         cout<<"We need INIT function for modehandler..."<<endl;
+//         //init(cp.id, cp.array_index, cp.value,cp.mode,cp.type, cp.name, cp.description);
+//     }
+//     return *this;
+// }
 
 
 
@@ -190,7 +211,7 @@ void ModeHandler::updateMode(int pressure_l, int pressure_h, bool compressor){
     //MOVED TO MAIN
     //this->updateTimer(seconds_passed);
 
-    //START REPLACING VARIABLES <----------------------------
+    
 
     //Mode Logic
     if(start_switch == 1){
@@ -278,7 +299,7 @@ void ModeHandler::updateMode(int pressure_l, int pressure_h, bool compressor){
         // put this at the bottom so its not overwritten,
         // TODO make a function that returns current mode so we can exit early
         if(relay_motor == 1 && compressor ==0){
-            //give it inital 2 seconds to turn on compressor using the mode 4's wait
+            //give it inital 6 seconds to turn on compressor using the mode 4's wait
             if(timer_mode4_wait <= 4){
                 this->start_switch = 0;
                 this->current_mode = 1;

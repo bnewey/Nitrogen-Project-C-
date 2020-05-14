@@ -122,18 +122,18 @@ void getPressuresLH(char  (&read_buf)[BUFF_SIZE], int & low_pressure, int & high
     
 }
 
-void editWriteBuf(char (&temp)[102], ModeHandler mh){
+void editWriteBuf(char (&temp)[102], shared_ptr<ModeHandler> mh){
 	temp[0] = 0x02;
 	temp[1] = 0x00; //fake pressure spot
 	temp[2] = 0x11; //fake pressure spot
 	temp[3] = 0x00; //fake pressure spot
 	temp[4] = 0x11; //fake pressure spot
-	temp[5] = (mh.getRelayStart() ? 0x01 : 0x00);
-	temp[6] = (mh.getRelayStop() ? 0x01 : 0x00);
-	temp[7] = (mh.getRelayBleed() ? 0x01 : 0x00);
-	temp[8] = (mh.getRelayMotor() ? 0x01 : 0x00);
-	temp[9] = (mh.getRelayPump() ? 0x01 : 0x00);
-	temp[10] = (mh.getRelayChiller() ? 0x01 : 0x00);
+	temp[5] = ((*mh).getRelayStart() ? 0x01 : 0x00);
+	temp[6] = ((*mh).getRelayStop() ? 0x01 : 0x00);
+	temp[7] = ((*mh).getRelayBleed() ? 0x01 : 0x00);
+	temp[8] = ((*mh).getRelayMotor() ? 0x01 : 0x00);
+	temp[9] = ((*mh).getRelayPump() ? 0x01 : 0x00);
+	temp[10] = ((*mh).getRelayChiller() ? 0x01 : 0x00);
 	for(int i=0; i<90;i++) { //space for later boards
 		temp[i+11] = 0x00;
 	} 
@@ -339,6 +339,7 @@ int mysqlQueryFixed(MYSQL & mysql, vector< vector<string> > & return_array){
 
 void mysqlCloseConnect(MYSQL &mysql){
 	mysql_close(&mysql);
+  	mysql_library_end();
 }
 
 int readNodeSocket( int & new_socket, char  (&ui_buf)[4] ){
@@ -415,7 +416,7 @@ int nodeSocket(int & server_fd){
 	return new_socket;
 }
 
-string createJsonDataString(char  (&read_buf)[BUFF_SIZE], int pressure_low, int pressure_high, bool compressor,  ModeHandler mh, long numJsonSends){
+string createJsonDataString(char  (&read_buf)[BUFF_SIZE], int pressure_low, int pressure_high, bool compressor,  shared_ptr<ModeHandler> mh, long numJsonSends){
 	int temp=0;
 	float timer_temp=0.00;
 	bool mode_start_stop = 0;
@@ -443,26 +444,26 @@ string createJsonDataString(char  (&read_buf)[BUFF_SIZE], int pressure_low, int 
 	}
 
 	//Timers
-	timer_temp = mh.getTimerMode2();
+	timer_temp = (*mh).getTimerMode2();
 	myJson["timer_mode2"] = Json::Value::Int(timer_temp);
-	timer_temp = mh.getTimerMode4();
+	timer_temp = (*mh).getTimerMode4();
 	myJson["timer_mode4"] = Json::Value::Int(timer_temp);
-	timer_temp = mh.getTimerStartRelay();
+	timer_temp = (*mh).getTimerStartRelay();
 	myJson["timer_start_relay"] = Json::Value::Int(timer_temp);
-	timer_temp = mh.getTimerStopRelay();
+	timer_temp = (*mh).getTimerStopRelay();
 	myJson["timer_stop_relay"] = Json::Value::Int(timer_temp);
-	timer_temp = mh.getTimerBleedRelay();
+	timer_temp = (*mh).getTimerBleedRelay();
 	myJson["timer_bleed_relay"] = Json::Value::Int(timer_temp);
-	timer_temp = mh.getTimerMotorRelay();
+	timer_temp = (*mh).getTimerMotorRelay();
 	myJson["timer_motor_relay"] = Json::Value::Int(timer_temp);
-	timer_temp = mh.getTimerShutDownCounter();
+	timer_temp = (*mh).getTimerShutDownCounter();
 	myJson["timer_shut_down_counter"] = Json::Value::Int(timer_temp);
 
 	//Current Mode
-	current_mode = mh.getCurrentMode();
+	current_mode = (*mh).getCurrentMode();
 	myJson["current_mode"] = Json::Value::Int(current_mode);
 	//Start Stop Indicator
-	mode_start_stop = mh.getStartStopValue();
+	mode_start_stop = (*mh).getStartStopValue();
 	myJson["start_stop"] = Json::Value::Int(mode_start_stop);
 
 

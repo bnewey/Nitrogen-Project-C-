@@ -28,6 +28,7 @@
 #include <sys/socket.h>
 
 #include <vector>
+#include <memory>
 #include <iostream>
 #include <iomanip>
 
@@ -89,7 +90,9 @@ int main() {
 	//Set Start time for Timers
 	std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 	
-	ModeHandler modeHandler(mode_variables[0][1] == "timer_mode2_wait" ? stof(mode_variables[0][0]) : float(120),
+	//ModeHandler modeHandler(); 
+	//ModeHandler * mh =&modeHandler;
+	shared_ptr<ModeHandler> mh(make_shared<ModeHandler>(mode_variables[0][1] == "timer_mode2_wait" ? stof(mode_variables[0][0]) : float(120),
 							mode_variables[1][1] == "timer_mode4_wait" ? stof(mode_variables[1][0]) : float(10),
 							mode_variables[2][1] == "timer_motor_relay" ? stof(mode_variables[2][0]) : float(30),
 							mode_variables[3][1] == "timer_start_relay" ? stof(mode_variables[3][0]) : float(2),
@@ -102,8 +105,7 @@ int main() {
 							mode_variables[10][1] == "max_low_pressure" ? stoi(mode_variables[10][0]) : 94,
 							mode_variables[11][1] == "low_pressure_thres" ? stoi(mode_variables[11][0]) : 86,
 							mode_variables[12][1] == "min_low_pressure" ? stoi(mode_variables[12][0]) : 60,
-							mode_variables[13][1] == "shut_down_counter" ? stoi(mode_variables[13][0]) : 2); 
-	ModeHandler * mh =&modeHandler;
+							mode_variables[13][1] == "shut_down_counter" ? stoi(mode_variables[13][0]) : 2));
 
 	//ModeHandler modeHandler;
 	//Pressure Values
@@ -184,7 +186,7 @@ int main() {
 			(*mh).updateMode(low_pressure, high_pressure, compressor);
 			
 			//Edit write_buf with relay_p pointer to array
-			editWriteBuf(write_buf, (*mh));
+			editWriteBuf(write_buf, mh);
 
 			print_write_buff(write_buf, 3 ,3 );
 
@@ -193,7 +195,7 @@ int main() {
 
 			
 			numJsonSends++;
-			const string tmp2 = createJsonDataString(read_buf, low_pressure, high_pressure, compressor,  (*mh), numJsonSends);
+			const string tmp2 = createJsonDataString(read_buf, low_pressure, high_pressure, compressor,  mh, numJsonSends);
 			//convert string to char array
 			char const * stringified_json = tmp2.c_str();
 			int size = strlen(stringified_json);
@@ -221,8 +223,10 @@ int main() {
 					if(!(mysqlQueryFixed(mysql, mode_variables))){
 						cout<<"Query to MySQL did not successfully get mode_variables, default variables applied"<<endl;
 					}
-					//create new object 
-					ModeHandler modeHandlerNew(mode_variables[0][1] == "timer_mode2_wait" ? stof(mode_variables[0][0]) : float(120),
+
+					
+					//create new object and assign to mh shared_ptr
+					mh = make_shared<ModeHandler>(mode_variables[0][1] == "timer_mode2_wait" ? stof(mode_variables[0][0]) : float(120),
 							mode_variables[1][1] == "timer_mode4_wait" ? stof(mode_variables[1][0]) : float(10),
 							mode_variables[2][1] == "timer_motor_relay" ? stof(mode_variables[2][0]) : float(30),
 							mode_variables[3][1] == "timer_start_relay" ? stof(mode_variables[3][0]) : float(2),
@@ -235,8 +239,7 @@ int main() {
 							mode_variables[10][1] == "max_low_pressure" ? stoi(mode_variables[10][0]) : 94,
 							mode_variables[11][1] == "low_pressure_thres" ? stoi(mode_variables[11][0]) : 86,
 							mode_variables[12][1] == "min_low_pressure" ? stoi(mode_variables[12][0]) : 60,
-							mode_variables[13][1] == "shut_down_counter" ? stoi(mode_variables[13][0]) : 2); 
-					mh =&modeHandlerNew;
+							mode_variables[13][1] == "shut_down_counter" ? stoi(mode_variables[13][0]) : 2);
 					cout<<"Mode Variables Changed"<<endl;
 				}
 			}else{
