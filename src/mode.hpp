@@ -14,7 +14,7 @@ class ModeHandler {
     bool compressor;
     
     //
-    bool start_switch;
+    
 
     bool relay_start;
     bool relay_stop;
@@ -51,6 +51,8 @@ class ModeHandler {
     int MIN_LOW_PRESSURE;
 
     int SHUT_DOWN_COUNTER_MAX;
+
+    bool start_switch;
     //
 
   //public interface
@@ -62,7 +64,7 @@ class ModeHandler {
     // constructor from int (denominator)
     ModeHandler( float a, float b, float c, float d, float e,
     float f, float g,
-    float h, int i, int j, int k, int l, int m, int n);
+    float h, int i, int j, int k, int l, int m, int n, int o);
 
     //Copy constructor
     ModeHandler( const ModeHandler &cp);

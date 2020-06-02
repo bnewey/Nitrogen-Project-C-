@@ -299,7 +299,9 @@ int mysqlQueryFixed(MYSQL & mysql, vector< vector<string> > & return_array){
 	unsigned int num_fields;
 	MYSQL_ROW row;
 
-	if(mysql_query(&mysql, "SELECT * FROM mode_variables ORDER BY id ASC")){ 
+
+
+	if(mysql_query(&mysql, "SELECT *  FROM mode_variables ORDER BY id ASC")){ 
 		cout<<"MySQL Query Error"<<endl;
 		return 0;
 	}
@@ -333,6 +335,17 @@ int mysqlQueryFixed(MYSQL & mysql, vector< vector<string> > & return_array){
 	}
 
 	mysql_free_result(result);
+	return 1;
+	
+}
+
+int mysqlQueryNoReturn(MYSQL & mysql, const string sql){
+
+	if(mysql_query(&mysql, sql.c_str())){ 
+		cout<<"MySQL Query Error"<<mysql_error(&mysql)<<endl;
+		return 0;
+	}
+
 	return 1;
 	
 }

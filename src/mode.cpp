@@ -75,11 +75,11 @@ ModeHandler::ModeHandler(){
 
 // Constructor with int  current_mode passed
 ModeHandler::ModeHandler( float a, float b, float c, float d, float e, float f, float g,
-  float h, int i, int j, int k, int l, int m, int n) 
+  float h, int i, int j, int k, int l, int m, int n, int o) 
   : TIMER_MODE2_WAIT(a), TIMER_MODE4_WAIT(b), TIMER_MOTOR_RELAY(c), TIMER_START_RELAY(d), TIMER_STOP_RELAY(e),
     TIMER_SHUT_DOWN_COUNTER(f), TIMER_BLEED_RELAY_M45(g), TIMER_BLEED_RELAY_M1(h), 
     MAX_HIGH_PRESSURE(i), HIGH_PRESSURE_THRESHOLD(j), MAX_LOW_PRESSURE(k), 
-    LOW_PRESSURE_THRESHOLD(l), MIN_LOW_PRESSURE(m), SHUT_DOWN_COUNTER_MAX(n)
+    LOW_PRESSURE_THRESHOLD(l), MIN_LOW_PRESSURE(m), SHUT_DOWN_COUNTER_MAX(n), start_switch(o == 1 ? true : false)
   {
     //start with stop mode 1
     current_mode=0;
@@ -88,7 +88,7 @@ ModeHandler::ModeHandler( float a, float b, float c, float d, float e, float f, 
     pressure_low = 0;
     compressor = 0;
 
-    start_switch=0;
+    //start_switch=0; //passed thru params
 
     relay_start=0;
     relay_stop=0;
