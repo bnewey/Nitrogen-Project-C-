@@ -365,8 +365,9 @@ int main() {
 				pthread_t db_thread;
 
 				bool tmp_ss = (*mh).getStartStopValue();
-				string tmp_string = "UPDATE mode_variables SET start_stop = ";
+				string tmp_string = "UPDATE mode_variables SET value = ";
 				tmp_string +=  tmp_ss ? to_string(1) : to_string(0);
+				tmp_string += " WHERE tag = 'start_stop'";
 
 				args.start_stop = tmp_string;
 
